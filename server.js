@@ -29,6 +29,7 @@ async function initDB() {
         phone VARCHAR(20),
         bio TEXT,
         avatar TEXT,
+        role VARCHAR(20) DEFAULT 'user',
         is_admin BOOLEAN DEFAULT FALSE,
         is_vip BOOLEAN DEFAULT FALSE,
         banned_until TIMESTAMP DEFAULT NULL
@@ -63,7 +64,7 @@ async function initDB() {
     `);
 
     await pool.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS id SERIAL;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
@@ -103,9 +104,10 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    // Asitti 'role' dabalameera (default 'user' ta'ee akka galmaa'u)
     const userRes = await pool.query(
-      'INSERT INTO users (username, password, phone, bio) VALUES ($1, $2, $3, $4) RETURNING id, username, is_admin, is_vip',
-      [username, hashedPassword, phone || '', bio || '']
+      'INSERT INTO users (username, password, phone, bio, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, is_admin, is_vip, role',
+      [username, hashedPassword, phone || '', bio || '', 'user']
     );
     res.json({ success: true, user: userRes.rows[0] });
   } catch (err) {
