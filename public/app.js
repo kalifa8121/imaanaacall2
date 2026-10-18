@@ -73,7 +73,7 @@ socket.on('update-user-list', users => {
   });
 });
 
-// WEBRTC CALL ENGINE LOGIC
+// WEBRTC CALL ENGINE LOGIC (Suuraa fi Sagalee Dhaga'uu)
 async function startCall(userToCall, isVideo) {
   try {
     currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
@@ -86,8 +86,14 @@ async function startCall(userToCall, isVideo) {
       socket.emit('call-user', { userToCall, signalData, callerName: currentUser.username, isVideo });
     });
 
-    peer.on('stream', stream => {
-      document.getElementById('remote-video').srcObject = stream;
+    peer.on('stream', remoteStream => {
+      const remoteVideo = document.getElementById('remote-video');
+      remoteVideo.srcObject = remoteStream;
+      remoteVideo.play().catch(e => console.log("Stream play error:", e));
+    });
+
+    peer.on('iceCandidate', candidate => {
+      socket.emit('ice-candidate', { to: userToCall, candidate });
     });
   } catch(e) { alert("Camera/Microphone Permission Gaafatamaa!"); }
 }
@@ -110,8 +116,11 @@ async function acceptCall() {
   peer = new SimplePeer({ initiator: false, trickle: false, stream: currentStream });
 
   peer.on('signal', signal => socket.emit('accept-call', { signal, to: incomingData.from }));
-  peer.on('stream', stream => {
-    document.getElementById('remote-video').srcObject = stream;
+  
+  peer.on('stream', remoteStream => {
+    const remoteVideo = document.getElementById('remote-video');
+    remoteVideo.srcObject = remoteStream;
+    remoteVideo.play().catch(e => console.log("Stream play error:", e));
   });
 
   peer.signal(incomingData.signal);
@@ -124,6 +133,7 @@ function rejectCall() {
 }
 
 socket.on('call-accepted', signal => peer.signal(signal));
+socket.on('call-rejected', () => { alert("Waamichi keessan fudhatamee hin jiru."); endCall(); });
 socket.on('call-failed-offline', () => { alert("Maammilli offline waan ta'eef bilbilamuu hin dandeenye."); endCall(); });
 
 function endCall() {
