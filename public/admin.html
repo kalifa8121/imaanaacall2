@@ -2,7 +2,7 @@
 <html lang="om">
 <head>
   <meta charset="UTF-8">
-  <title>Admin Moderation & Ban Console</title>
+  <title>Admin Dashboard - Post & User Control</title>
   <style>
     body { font-family: sans-serif; background: #0b141a; color: white; padding: 20px; }
     .card { background: #111b21; border: 1px solid #2a3942; padding: 15px; margin-bottom: 15px; border-radius: 8px; }
@@ -14,19 +14,19 @@
 </head>
 <body>
 
-  <h2>Admin Dashboard (Content & User Moderation)</h2>
+  <h2>Admin Dashboard (Post Hunda Too'achuu)</h2>
 
-  <!-- BAN USER CONTROL -->
+  <!-- BAN USER -->
   <div class="card">
     <h3>Maammila Adabuu (Ban User)</h3>
     <input type="text" id="ban-user-in" placeholder="Username...">
-    <input type="number" id="ban-days-in" placeholder="Guyyoota (Days)..." value="3">
+    <input type="number" id="ban-days-in" placeholder="Guyyoota..." value="3">
     <button class="btn btn-danger" onclick="banUser()">Ban User 🚫</button>
   </div>
 
-  <!-- PENDING POSTS APPROVAL -->
+  <!-- ALL POSTS MODERATION -->
   <div class="card">
-    <h3>Post Pendy Jiran (Approve / Delete)</h3>
+    <h3>Posts Hunda (Approve / Delete)</h3>
     <div id="pending-posts"></div>
   </div>
 
@@ -39,10 +39,11 @@
       posts.forEach(p => {
         div.innerHTML += `
           <div style="border-bottom:1px solid #333; padding:10px;">
-            <b>@${p.username}:</b> ${p.content} <br>
-            ${p.media_url ? `<img src="${p.media_url}" style="max-width:200px;">` : ''} <br>
-            <button class="btn btn-green" onclick="approve(${p.id})">Approve (Raggaasisi)</button>
-            <button class="btn btn-danger" onclick="del(${p.id})">Delete (Haqi)</button>
+            <b>@${p.username}</b> [Status: ${p.approved ? 'Approved ✅' : 'Pending ⏳'}] <br>
+            <p>${p.content || ''}</p>
+            ${p.media_url ? `<img src="${p.media_url}" style="max-width:200px; display:block; margin-top:5px;">` : ''} <br>
+            ${!p.approved ? `<button class="btn btn-green" onclick="approve(${p.id})">Approve</button>` : ''}
+            <button class="btn btn-danger" onclick="del(${p.id})">Delete</button>
           </div>`;
       });
     }
