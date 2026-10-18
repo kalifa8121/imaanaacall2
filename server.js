@@ -55,14 +55,6 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE IF NOT EXISTS missed_calls (
-        id SERIAL PRIMARY KEY,
-        caller VARCHAR(50),
-        receiver VARCHAR(50),
-        call_type VARCHAR(20),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
       CREATE TABLE IF NOT EXISTS private_messages (
         id SERIAL PRIMARY KEY,
         sender VARCHAR(50),
@@ -99,19 +91,17 @@ async function startServer() {
 
 startServer();
 
-// AUTH APIS - SIGNUP
+// AUTH APIS
 app.post('/api/auth/signup', async (req, res) => {
   const { username, password, phone, bio } = req.body;
   try {
     if (!username || !password) {
       return res.status(400).json({ success: false, message: "Maqaa fi password guutuun dirqama!" });
     }
-
     const checkUser = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
     if (checkUser.rows.length > 0) {
-      return res.status(400).json({ success: false, message: "Maqaan (Username) kun duraan qabameera, maaloo kan biraa filadhu!" });
+      return res.status(400).json({ success: false, message: "Maqaan (Username) kun duraan qabameera!" });
     }
-
     const hashedPassword = await bcrypt.hash(password, 10);
     const userRes = await pool.query(
       'INSERT INTO users (username, password, phone, bio, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, is_admin, is_vip, role',
@@ -119,12 +109,10 @@ app.post('/api/auth/signup', async (req, res) => {
     );
     res.json({ success: true, user: userRes.rows[0] });
   } catch (err) {
-    console.error("Signup error details:", err);
     res.status(400).json({ success: false, message: "Galmaa'uun hin danda'amne: " + err.message });
   }
 });
 
-// AUTH APIS - LOGIN
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -142,7 +130,6 @@ app.post('/api/auth/login', async (req, res) => {
     delete user.password;
     res.json({ success: true, user });
   } catch (err) {
-    console.error("Login error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -150,10 +137,9 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/profile/update', async (req, res) => {
   try {
     const { username, phone, bio, avatar } = req.body;
-    await pool.query('UPDATE users SET phone = $1, bio = $2, avatar = $3 WHERE username = $4', [phone, bio, avatar, username]);
+    await pool.query('UPDATE users SET phone = $1, bio = $2, avatar = $3 WHERE username = $4', [phone, bio, avatar || '', username]);
     res.json({ success: true });
   } catch (err) {
-    console.error("Profile update error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
@@ -163,22 +149,51 @@ app.get('/api/posts', async (req, res) => {
     const posts = await pool.query('SELECT * FROM posts WHERE approved = TRUE ORDER BY id DESC LIMIT 50');
     res.json(posts.rows);
   } catch (err) {
-    console.error("Get posts error:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
-app.get('/api/comments/:postId', async (req, res) => {
+// ADMIN API ROUTES (Post fi User Too'achuuf)
+app.get('/api/admin/pending-posts', async (req, res) => {
   try {
-    const comments = await pool.query('SELECT * FROM comments WHERE post_id = $1 ORDER BY id ASC', [req.params.postId]);
-    res.json(comments.rows);
+    const posts = await pool.query('SELECT * FROM posts ORDER BY id DESC');
+    res.json(posts.rows);
   } catch (err) {
-    console.error("Get comments error:", err);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({ success: false });
   }
 });
 
-// WEBRTC, CHAT, & SOCKET REALTIME
+app.post('/api/admin/approve-post', async (req, res) => {
+  try {
+    await pool.query('UPDATE posts SET approved = TRUE WHERE id = $1', [req.body.postId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+});
+
+app.post('/api/admin/delete-post', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM posts WHERE id = $1', [req.body.postId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+});
+
+app.post('/api/admin/ban-user', async (req, res) => {
+  try {
+    const { username, days } = req.body;
+    const banUntil = new Date();
+    banUntil.setDate(banUntil.getDate() + parseInt(days));
+    await pool.query('UPDATE users SET banned_until = $1 WHERE username = $2', [banUntil, username]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+});
+
+// WEBRTC & SOCKET REALTIME (Chat, Group Chat & Calls)
 const activeUsers = {};
 
 io.on('connection', (socket) => {
@@ -202,11 +217,11 @@ io.on('connection', (socket) => {
 
       io.emit('update-user-list', userList);
     } catch (err) {
-      console.error("Broadcast user list error:", err);
+      console.error(err);
     }
   }
 
-  // --- WEBRTC CALL ENGINE ---
+  // WebRTC Call
   socket.on('call-user', (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.userToCall);
     if (targetSocket) {
@@ -224,36 +239,18 @@ io.on('connection', (socket) => {
   socket.on('accept-call', (data) => io.to(data.to).emit('call-accepted', data.signal));
   socket.on('reject-call', (data) => io.to(data.to).emit('call-rejected'));
 
-  // --- CHAT & GROUP CHAT ---
+  // Chat & Group Chat
+  socket.on('group-chat-message', (data) => {
+    io.emit('group-chat-message', data);
+  });
+
   socket.on('private-message', async (data) => {
-    try {
-      await pool.query(
-        'INSERT INTO private_messages (sender, receiver, message) VALUES ($1, $2, $3)',
-        [data.sender, data.receiver, data.message]
-      );
-      
-      const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.receiver);
-      if (targetSocket) {
-        io.to(targetSocket).emit('private-message', {
-          sender: data.sender,
-          message: data.message,
-          created_at: new Date()
-        });
-      }
-    } catch (err) {
-      console.error("Private message error:", err);
+    const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.receiver);
+    if (targetSocket) {
+      io.to(targetSocket).emit('private-message', data);
     }
   });
 
-  socket.on('group-chat-message', (data) => {
-    io.emit('group-chat-message', {
-      sender: data.sender,
-      message: data.message,
-      created_at: new Date()
-    });
-  });
-
-  // --- POSTS & COMMENTS ---
   socket.on('create-post', async (data) => {
     try {
       const res = await pool.query(
@@ -262,26 +259,7 @@ io.on('connection', (socket) => {
       );
       socket.emit('post-submitted-silent', res.rows[0]);
     } catch (err) {
-      console.error("Create post error:", err);
-    }
-  });
-
-  socket.on('like-post', async (postId) => {
-    try {
-      await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1', [postId]);
-      io.emit('update-likes', postId);
-    } catch (err) {
-      console.error("Like post error:", err);
-    }
-  });
-
-  socket.on('add-comment', async (data) => {
-    try {
-      const res = await pool.query('INSERT INTO comments (post_id, username, comment) VALUES ($1, $2, $3) RETURNING *',
-        [data.postId, data.username, data.comment]);
-      io.emit('new-comment', res.rows[0]);
-    } catch (err) {
-      console.error("Add comment error:", err);
+      console.error(err);
     }
   });
 
