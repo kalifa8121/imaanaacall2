@@ -7,9 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 const server = http.createServer(app);
-
-// Size hundi (hamma 1GB ol) akka upload tauuf buffer size guddisneerra
-const io = new Server(server, { maxHttpBufferSize: 1e9 });
+const io = new Server(server, { maxHttpBufferSize: 1e8 });
 
 const PORT = process.env.PORT || 10000;
 
@@ -18,9 +16,8 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
-// Request size limit gara 1GB (1000mb) guddisuun vidiyoo gurguddaa akka danda'u godheera
-app.use(express.json({ limit: '1000mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1000mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 async function initDB() {
