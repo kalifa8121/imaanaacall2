@@ -104,7 +104,6 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    // Asitti 'role' dabalameera (default 'user' ta'ee akka galmaa'u)
     const userRes = await pool.query(
       'INSERT INTO users (username, password, phone, bio, role) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, is_admin, is_vip, role',
       [username, hashedPassword, phone || '', bio || '', 'user']
@@ -170,11 +169,12 @@ app.get('/api/comments/:postId', async (req, res) => {
   }
 });
 
-// WEBRTC & SOCKET REALTIME
+// WEBRTC & SOCKET REALTIME (SIRREEFFAMEE JIRA)
 const activeUsers = {};
 
 io.on('connection', (socket) => {
   socket.on('register-user', (username) => {
+    if (!username) return;
     activeUsers[socket.id] = { id: socket.id, username };
     broadcastUserList();
   });
@@ -189,7 +189,7 @@ io.on('connection', (socket) => {
         avatar: u.avatar,
         is_vip: u.is_vip,
         isOnline: onlineUsernames.includes(u.username),
-        socketId: Object.keys(activeUsers).find(key => activeUsers[key].username === u.username)
+        socketId: Object.keys(activeUsers).find(key => activeUsers[key].username === u.username) || null
       }));
 
       io.emit('update-user-list', userList);
@@ -198,6 +198,7 @@ io.on('connection', (socket) => {
     }
   }
 
+  // WebRTC Call Signaling
   socket.on('call-user', (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.userToCall);
     if (targetSocket) {
@@ -212,8 +213,17 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('accept-call', (data) => io.to(data.to).emit('call-accepted', data.signal));
-  socket.on('reject-call', (data) => io.to(data.to).emit('call-rejected'));
+  socket.on('accept-call', (data) => {
+    if (data && data.to) {
+      io.to(data.to).emit('call-accepted', data.signal);
+    }
+  });
+
+  socket.on('reject-call', (data) => {
+    if (data && data.to) {
+      io.to(data.to).emit('call-rejected');
+    }
+  });
 
   socket.on('create-post', async (data) => {
     try {
