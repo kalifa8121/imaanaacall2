@@ -1,5 +1,5 @@
 const socket = io();
-let currentUser = null, isSignup = false, currentStream = null, peer = null, incomingData = null;
+let currentUser = null, isSignup = false, currentStream = null, peer = null, incomingData = null, activeChatUser = null;
 const ringtone = document.getElementById('ringtone');
 
 function toggleAuthMode() {
@@ -65,15 +65,16 @@ socket.on('update-user-list', users => {
         </div>
         <div>
           ${u.isOnline ? `
-            <button class="btn btn-green" style="width:auto; padding:5px;" onclick="startCall('${u.username}', false)">Voice 📞</button>
-            <button class="btn btn-primary" style="width:auto; padding:5px;" onclick="startCall('${u.username}', true)">Video 📹</button>
+            <button class="btn btn-green" style="width:auto; padding:4px;" onclick="startCall('${u.username}', false)">Voice 📞</button>
+            <button class="btn btn-primary" style="width:auto; padding:4px;" onclick="startCall('${u.username}', true)">Video 📹</button>
+            <button class="btn btn-primary" style="width:auto; padding:4px; background:#6c757d;" onclick="openPrivateChat('${u.username}')">Chat 💬</button>
           ` : '<small>Offline</small>'}
         </div>
       </div>`;
   });
 });
 
-// WEBRTC CALL ENGINE LOGIC (Suuraa fi Sagalee Dhaga'uu)
+// --- WEBRTC CALL ENGINE (Suuraa fi Sagaleef) ---
 async function startCall(userToCall, isVideo) {
   try {
     currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
@@ -89,13 +90,11 @@ async function startCall(userToCall, isVideo) {
     peer.on('stream', remoteStream => {
       const remoteVideo = document.getElementById('remote-video');
       remoteVideo.srcObject = remoteStream;
-      remoteVideo.play().catch(e => console.log("Stream play error:", e));
+      remoteVideo.play().catch(e => console.log("Remote video play error:", e));
     });
-
-    peer.on('iceCandidate', candidate => {
-      socket.emit('ice-candidate', { to: userToCall, candidate });
-    });
-  } catch(e) { alert("Camera/Microphone Permission Gaafatamaa!"); }
+  } catch(e) { 
+    alert("Camera/Microphone Permission Gaafatamaa!"); 
+  }
 }
 
 socket.on('incoming-call', data => {
@@ -110,20 +109,23 @@ async function acceptCall() {
   document.getElementById('call-modal').style.display = 'none';
   document.getElementById('call-screen').style.display = 'block';
 
-  currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: incomingData.isVideo });
-  document.getElementById('local-video').srcObject = currentStream;
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: incomingData.isVideo });
+    document.getElementById('local-video').srcObject = currentStream;
 
-  peer = new SimplePeer({ initiator: false, trickle: false, stream: currentStream });
+    peer = new SimplePeer({ initiator: false, trickle: false, stream: currentStream });
 
-  peer.on('signal', signal => socket.emit('accept-call', { signal, to: incomingData.from }));
-  
-  peer.on('stream', remoteStream => {
-    const remoteVideo = document.getElementById('remote-video');
-    remoteVideo.srcObject = remoteStream;
-    remoteVideo.play().catch(e => console.log("Stream play error:", e));
-  });
+    peer.on('signal', signal => socket.emit('accept-call', { signal, to: incomingData.from }));
+    peer.on('stream', remoteStream => {
+      const remoteVideo = document.getElementById('remote-video');
+      remoteVideo.srcObject = remoteStream;
+      remoteVideo.play().catch(e => console.log("Remote video play error:", e));
+    });
 
-  peer.signal(incomingData.signal);
+    peer.signal(incomingData.signal);
+  } catch (e) {
+    alert("Camera/Microphone Permission fudhachuu dadhabe!");
+  }
 }
 
 function rejectCall() {
@@ -142,6 +144,58 @@ function endCall() {
   document.getElementById('call-screen').style.display = 'none';
 }
 
+// --- CHAT & GROUP CHAT LOGIC ---
+function sendGroupMessage() {
+  const input = document.getElementById('group-msg-input');
+  const message = input.value.trim();
+  if(!message) return;
+
+  socket.emit('group-chat-message', { sender: currentUser.username, message });
+  input.value = '';
+}
+
+socket.on('group-chat-message', data => {
+  const box = document.getElementById('group-chat-box');
+  box.innerHTML += `<div><b>@${data.sender}:</b> ${data.message}</div>`;
+  box.scrollTop = box.scrollHeight;
+});
+
+function openPrivateChat(username) {
+  activeChatUser = username;
+  document.getElementById('private-chat-title').innerText = `Chat @${username} wajjin`;
+  document.getElementById('private-chat-section').style.display = 'block';
+  document.getElementById('private-chat-box').innerHTML = '';
+}
+
+function closePrivateChat() {
+  activeChatUser = null;
+  document.getElementById('private-chat-section').style.display = 'none';
+}
+
+function sendPrivateMessage() {
+  const input = document.getElementById('private-msg-input');
+  const message = input.value.trim();
+  if(!message || !activeChatUser) return;
+
+  socket.emit('private-message', { sender: currentUser.username, receiver: activeChatUser, message });
+
+  const box = document.getElementById('private-chat-box');
+  box.innerHTML += `<div style="text-align:right;"><b>Ani:</b> ${message}</div>`;
+  box.scrollTop = box.scrollHeight;
+  input.value = '';
+}
+
+socket.on('private-message', data => {
+  if (activeChatUser === data.sender) {
+    const box = document.getElementById('private-chat-box');
+    box.innerHTML += `<div><b>@${data.sender}:</b> ${data.message}</div>`;
+    box.scrollTop = box.scrollHeight;
+  } else {
+    alert(`Ergaa haaraan @${data.sender} irraa dhufeera!`);
+  }
+});
+
+// --- POSTS ---
 function submitPost() {
   const content = document.getElementById('post-text').value;
   const file = document.getElementById('post-file').files[0];
