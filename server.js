@@ -63,6 +63,7 @@ async function initDB() {
     `);
 
     await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS id SERIAL;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
@@ -88,7 +89,7 @@ async function startServer() {
 
 startServer();
 
-// AUTH APIS - SIGNUP SIRREEFFAME
+// AUTH APIS - SIGNUP
 app.post('/api/auth/signup', async (req, res) => {
   const { username, password, phone, bio } = req.body;
   try {
@@ -96,7 +97,6 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ success: false, message: "Maqaa fi password guutuun dirqama!" });
     }
 
-    // Dursee username sun jiraachuu isaa ilaaluuf
     const checkUser = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
     if (checkUser.rows.length > 0) {
       return res.status(400).json({ success: false, message: "Maqaan (Username) kun duraan qabameera, maaloo kan biraa filadhu!" });
@@ -114,6 +114,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
+// AUTH APIS - LOGIN
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   try {
