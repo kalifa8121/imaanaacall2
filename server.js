@@ -17,6 +17,7 @@ const pool = new Pool({
 });
 
 app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 async function initDB() {
@@ -59,6 +60,14 @@ async function initDB() {
         caller VARCHAR(50),
         receiver VARCHAR(50),
         call_type VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS private_messages (
+        id SERIAL PRIMARY KEY,
+        sender VARCHAR(50),
+        receiver VARCHAR(50),
+        message TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -169,12 +178,11 @@ app.get('/api/comments/:postId', async (req, res) => {
   }
 });
 
-// WEBRTC & SOCKET REALTIME (SIRREEFFAMEE JIRA)
+// WEBRTC & SOCKET REALTIME (Direct Chat, Group Chat, & WebRTC Calls)
 const activeUsers = {};
 
 io.on('connection', (socket) => {
   socket.on('register-user', (username) => {
-    if (!username) return;
     activeUsers[socket.id] = { id: socket.id, username };
     broadcastUserList();
   });
@@ -189,7 +197,7 @@ io.on('connection', (socket) => {
         avatar: u.avatar,
         is_vip: u.is_vip,
         isOnline: onlineUsernames.includes(u.username),
-        socketId: Object.keys(activeUsers).find(key => activeUsers[key].username === u.username) || null
+        socketId: Object.keys(activeUsers).find(key => activeUsers[key].username === u.username)
       }));
 
       io.emit('update-user-list', userList);
@@ -198,7 +206,7 @@ io.on('connection', (socket) => {
     }
   }
 
-  // WebRTC Call Signaling
+  // --- 1. WEBRTC CALLING ENGINE (Suuraa fi Sagaleef) ---
   socket.on('call-user', (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.userToCall);
     if (targetSocket) {
@@ -214,17 +222,51 @@ io.on('connection', (socket) => {
   });
 
   socket.on('accept-call', (data) => {
-    if (data && data.to) {
-      io.to(data.to).emit('call-accepted', data.signal);
-    }
+    io.to(data.to).emit('call-accepted', data.signal);
   });
 
   socket.on('reject-call', (data) => {
-    if (data && data.to) {
-      io.to(data.to).emit('call-rejected');
+    io.to(data.to).emit('call-rejected');
+  });
+
+  // ICE Candidates exchange for WebRTC connection stability
+  socket.on('ice-candidate', (data) => {
+    io.to(data.to).emit('ice-candidate', data.candidate);
+  });
+
+  // --- 2. DIRECT CHAT & GROUP CHAT ---
+  // Direct Message (Private Chat)
+  socket.on('private-message', async (data) => {
+    try {
+      await pool.query(
+        'INSERT INTO private_messages (sender, receiver, message) VALUES ($1, $2, $3)',
+        [data.sender, data.receiver, data.message]
+      );
+      
+      const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.receiver);
+      if (targetSocket) {
+        io.to(targetSocket).emit('private-message', {
+          sender: data.sender,
+          message: data.message,
+          created_at: new Date()
+        });
+      }
+      socket.emit('private-message-sent', { success: true });
+    } catch (err) {
+      console.error("Private message error:", err);
     }
   });
 
+  // Group Chat (Broadcast message to all connected users)
+  socket.on('group-chat-message', (data) => {
+    io.emit('group-chat-message', {
+      sender: data.sender,
+      message: data.message,
+      created_at: new Date()
+    });
+  });
+
+  // --- POSTS & COMMENTS ---
   socket.on('create-post', async (data) => {
     try {
       const res = await pool.query(
