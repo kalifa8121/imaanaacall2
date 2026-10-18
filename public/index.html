@@ -43,7 +43,7 @@
 
   <div class="container">
 
-    <!-- AUTH SECTION (SIGNUP / LOGIN) -->
+    <!-- AUTH SECTION -->
     <div id="auth-sec" class="card">
       <h3 id="auth-title">Login</h3>
       <input type="text" id="auth-username" class="input-field" placeholder="Username...">
@@ -58,7 +58,7 @@
     <!-- MAIN APP SUITE -->
     <div id="app-sec" style="display: none;">
 
-      <!-- EDIT PROFILE -->
+      <!-- PROFILE -->
       <div class="card">
         <h4>Profaayilii Edittii Gochuu</h4>
         <input type="text" id="edit-phone" class="input-field" placeholder="Lakkoofsa Bilbilaa...">
@@ -66,30 +66,13 @@
         <button class="btn btn-green" onclick="saveProfile()">Profile Update</button>
       </div>
 
-      <!-- ONLINE USERS & CALL ENGINE -->
+      <!-- ONLINE USERS & CALL -->
       <div class="card">
         <h4>Maammiltoota (Users & Direct Call / Chat)</h4>
         <div id="users-list"></div>
       </div>
 
-      <!-- GROUP CHAT SECTION -->
-      <div class="card">
-        <h4>Group Chat (Hawaasa Waliif)</h4>
-        <div id="group-chat-box" style="height: 140px; overflow-y: scroll; border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; background: #fafafa; border-radius: 6px;"></div>
-        <input type="text" id="group-msg-input" class="input-field" placeholder="Ergaa group-aaf barreessi...">
-        <button class="btn btn-primary" onclick="sendGroupMessage()">Group-tti Ergi</button>
-      </div>
-
-      <!-- PRIVATE CHAT SECTION -->
-      <div class="card" id="private-chat-section" style="display:none;">
-        <h4 id="private-chat-title">Direct Chat</h4>
-        <div id="private-chat-box" style="height: 120px; overflow-y: scroll; border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; background: #fafafa; border-radius: 6px;"></div>
-        <input type="text" id="private-msg-input" class="input-field" placeholder="Ergaa dhuunfaa barreessi...">
-        <button class="btn btn-green" onclick="sendPrivateMessage()">Ergi</button>
-        <button class="btn btn-danger" onclick="closePrivateChat()" style="margin-top:5px;">Cufi</button>
-      </div>
-
-      <!-- CALL SCREEN DISPLAY -->
+      <!-- CALL SCREEN -->
       <div id="call-screen" class="card" style="display: none;">
         <h4>Video / Voice Call Active</h4>
         <div class="video-call-box">
@@ -97,6 +80,23 @@
           <video id="remote-video" autoplay></video>
         </div>
         <button class="btn btn-danger" onclick="endCall()">End Call 🚫</button>
+      </div>
+
+      <!-- GROUP CHAT -->
+      <div class="card">
+        <h4>Group Chat (Hawaasa Waliif)</h4>
+        <div id="group-chat-box" style="height: 140px; overflow-y: scroll; border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; background: #fafafa;"></div>
+        <input type="text" id="group-msg-input" class="input-field" placeholder="Ergaa group-aaf...">
+        <button class="btn btn-primary" onclick="sendGroupMessage()">Group-tti Ergi</button>
+      </div>
+
+      <!-- PRIVATE CHAT -->
+      <div class="card" id="private-chat-section" style="display:none;">
+        <h4 id="private-chat-title">Direct Chat</h4>
+        <div id="private-chat-box" style="height: 120px; overflow-y: scroll; border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; background: #fafafa;"></div>
+        <input type="text" id="private-msg-input" class="input-field" placeholder="Ergaa dhuunfaa...">
+        <button class="btn btn-green" onclick="sendPrivateMessage()">Ergi</button>
+        <button class="btn btn-danger" onclick="closePrivateChat()" style="margin-top:5px;">Cufi</button>
       </div>
 
       <!-- POST FEED -->
