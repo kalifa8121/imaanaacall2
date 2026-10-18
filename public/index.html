@@ -58,7 +58,7 @@
     <!-- MAIN APP SUITE -->
     <div id="app-sec" style="display: none;">
 
-      <!-- EDIT PROFILE MODAL / SECTION -->
+      <!-- EDIT PROFILE -->
       <div class="card">
         <h4>Profaayilii Edittii Gochuu</h4>
         <input type="text" id="edit-phone" class="input-field" placeholder="Lakkoofsa Bilbilaa...">
@@ -66,10 +66,27 @@
         <button class="btn btn-green" onclick="saveProfile()">Profile Update</button>
       </div>
 
-      <!-- ONLINE/OFFLINE USERS & CALL ENGINE -->
+      <!-- ONLINE USERS & CALL ENGINE -->
       <div class="card">
-        <h4>Maammiltoota (Users & Direct Call)</h4>
+        <h4>Maammiltoota (Users & Direct Call / Chat)</h4>
         <div id="users-list"></div>
+      </div>
+
+      <!-- GROUP CHAT SECTION -->
+      <div class="card">
+        <h4>Group Chat (Hawaasa Waliif)</h4>
+        <div id="group-chat-box" style="height: 140px; overflow-y: scroll; border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; background: #fafafa; border-radius: 6px;"></div>
+        <input type="text" id="group-msg-input" class="input-field" placeholder="Ergaa group-aaf barreessi...">
+        <button class="btn btn-primary" onclick="sendGroupMessage()">Group-tti Ergi</button>
+      </div>
+
+      <!-- PRIVATE CHAT SECTION -->
+      <div class="card" id="private-chat-section" style="display:none;">
+        <h4 id="private-chat-title">Direct Chat</h4>
+        <div id="private-chat-box" style="height: 120px; overflow-y: scroll; border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; background: #fafafa; border-radius: 6px;"></div>
+        <input type="text" id="private-msg-input" class="input-field" placeholder="Ergaa dhuunfaa barreessi...">
+        <button class="btn btn-green" onclick="sendPrivateMessage()">Ergi</button>
+        <button class="btn btn-danger" onclick="closePrivateChat()" style="margin-top:5px;">Cufi</button>
       </div>
 
       <!-- CALL SCREEN DISPLAY -->
@@ -82,7 +99,7 @@
         <button class="btn btn-danger" onclick="endCall()">End Call 🚫</button>
       </div>
 
-      <!-- POST FEED (TIKTOK/FACEBOOK HYBRID) -->
+      <!-- POST FEED -->
       <div class="card">
         <h4>Maxxansa Haaraa (Post)</h4>
         <textarea id="post-text" class="input-field" placeholder="Maaltu jira..."></textarea>
