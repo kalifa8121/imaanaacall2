@@ -21,7 +21,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 async function initDB() {
   try {
-    // 1. Dursee Table-wwan hunda id qopheessuun uuma
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -63,7 +62,6 @@ async function initDB() {
       );
     `);
 
-    // 2. Kolonni haaraan yoo hir'atan ni dabala
     await pool.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
@@ -77,11 +75,10 @@ async function initDB() {
     console.log("Database initialized & schema updated successfully.");
   } catch (err) {
     console.error("DB Initialization Error:", err);
-    process.exit(1); // Yoo database kaasuun dadhabame error wajjin akka dhaabbatu godha
+    process.exit(1);
   }
 }
 
-// 3. Server jalqabuu dura Database akka qophaa'u eeguu
 async function startServer() {
   await initDB();
   server.listen(PORT, () => {
@@ -91,19 +88,29 @@ async function startServer() {
 
 startServer();
 
-// AUTH APIS
+// AUTH APIS - SIGNUP SIRREEFFAME
 app.post('/api/auth/signup', async (req, res) => {
   const { username, password, phone, bio } = req.body;
   try {
+    if (!username || !password) {
+      return res.status(400).json({ success: false, message: "Maqaa fi password guutuun dirqama!" });
+    }
+
+    // Dursee username sun jiraachuu isaa ilaaluuf
+    const checkUser = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+    if (checkUser.rows.length > 0) {
+      return res.status(400).json({ success: false, message: "Maqaan (Username) kun duraan qabameera, maaloo kan biraa filadhu!" });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const userRes = await pool.query(
       'INSERT INTO users (username, password, phone, bio) VALUES ($1, $2, $3, $4) RETURNING id, username, is_admin, is_vip',
-      [username, hashedPassword, phone, bio]
+      [username, hashedPassword, phone || '', bio || '']
     );
     res.json({ success: true, user: userRes.rows[0] });
   } catch (err) {
-    console.error("Signup error:", err);
-    res.status(400).json({ success: false, message: "Username'n kun ykn odeeffannoon dogoggora qaba!" });
+    console.error("Signup error details:", err);
+    res.status(400).json({ success: false, message: "Galmaa'uun hin danda'amne: " + err.message });
   }
 });
 
@@ -188,7 +195,6 @@ io.on('connection', (socket) => {
     }
   }
 
-  // WEBRTC CALLING ENGINE
   socket.on('call-user', (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.userToCall);
     if (targetSocket) {
