@@ -26,7 +26,7 @@ const pool = new Pool({
 app.use(compression());
 app.use(express.json({ limit: '1000mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1000mb' }));
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 async function initDB() {
   try {
@@ -201,7 +201,7 @@ app.post('/api/admin/ban-user', async (req, res) => {
   }
 });
 
-// WEBRTC & SOCKET REALTIME (Direct Call & Group Call)
+// WEBRTC & SOCKET REALTIME
 const activeUsers = {};
 
 io.on('connection', (socket) => {
@@ -229,7 +229,6 @@ io.on('connection', (socket) => {
     }
   }
 
-  // 1-on-1 Call
   socket.on('call-user', (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.userToCall);
     if (targetSocket) {
@@ -247,7 +246,7 @@ io.on('connection', (socket) => {
   socket.on('accept-call', (data) => io.to(data.to).emit('call-accepted', data.signal));
   socket.on('reject-call', (data) => io.to(data.to).emit('call-rejected'));
 
-  // --- FACEBOOK STYLE GROUP CALL SIGNALING ---
+  // GROUP CALL SIGNALING
   socket.on('join-group-call', () => {
     socket.broadcast.emit('user-joined-group', socket.id);
   });
@@ -260,7 +259,6 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('user-left-group', socket.id);
   });
 
-  // Chat & Posts
   socket.on('group-chat-message', (data) => io.emit('group-chat-message', data));
   socket.on('private-message', async (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.receiver);
