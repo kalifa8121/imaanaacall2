@@ -1,5 +1,11 @@
-const socket = io();
+const socket = io({
+  transports: ['websocket', 'polling'],
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000
+});
+
 let currentUser = null, isSignup = false, currentStream = null, peer = null, incomingData = null, activeChatUser = null;
+let groupPeers = {};
 const ringtone = document.getElementById('ringtone');
 
 function toggleAuthMode() {
@@ -126,10 +132,16 @@ socket.on('private-message', data => {
   }
 });
 
-// WEBRTC CALL ENGINE (Suuraa fi Sagalee Hirmaataa)
+// --- 1-on-1 CALL ENGINE ---
 async function startCall(userToCall, isVideo) {
   try {
-    currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
+    currentStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: true, 
+      video: isVideo ? { width: { ideal: 640 }, height: { ideal: 480 } } : false 
+    });
+    
+    const grid = document.getElementById('video-grid');
+    grid.innerHTML = `<video id="local-video" autoplay muted></video><video id="remote-video" autoplay></video>`;
     document.getElementById('local-video').srcObject = currentStream;
     document.getElementById('call-screen').style.display = 'block';
 
@@ -141,8 +153,7 @@ async function startCall(userToCall, isVideo) {
 
     peer.on('stream', remoteStream => {
       const remoteVideo = document.getElementById('remote-video');
-      remoteVideo.srcObject = remoteStream;
-      remoteVideo.play().catch(e => console.log(e));
+      if(remoteVideo) remoteVideo.srcObject = remoteStream;
     });
   } catch(e) { alert("Camera/Microphone Permission Gaafatamaa!"); }
 }
@@ -159,7 +170,13 @@ async function acceptCall() {
   document.getElementById('call-modal').style.display = 'none';
   document.getElementById('call-screen').style.display = 'block';
 
-  currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: incomingData.isVideo });
+  currentStream = await navigator.mediaDevices.getUserMedia({ 
+    audio: true, 
+    video: incomingData.isVideo ? { width: { ideal: 640 }, height: { ideal: 480 } } : false 
+  });
+  
+  const grid = document.getElementById('video-grid');
+  grid.innerHTML = `<video id="local-video" autoplay muted></video><video id="remote-video" autoplay></video>`;
   document.getElementById('local-video').srcObject = currentStream;
 
   peer = new SimplePeer({ initiator: false, trickle: false, stream: currentStream });
@@ -167,8 +184,7 @@ async function acceptCall() {
   peer.on('signal', signal => socket.emit('accept-call', { signal, to: incomingData.from }));
   peer.on('stream', remoteStream => {
     const remoteVideo = document.getElementById('remote-video');
-    remoteVideo.srcObject = remoteStream;
-    remoteVideo.play().catch(e => console.log(e));
+    if(remoteVideo) remoteVideo.srcObject = remoteStream;
   });
 
   peer.signal(incomingData.signal);
@@ -180,35 +196,118 @@ function rejectCall() {
   socket.emit('reject-call', { to: incomingData.from });
 }
 
-socket.on('call-accepted', signal => peer.signal(signal));
+socket.on('call-accepted', signal => { if(peer) peer.signal(signal); });
 socket.on('call-failed-offline', () => { alert("Maammilli offline waan ta'eef bilbilamuu hin dandeenye."); endCall(); });
 
+// --- FACEBOOK STYLE GROUP CALL LOGIC ---
+async function startGroupCall() {
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    const grid = document.getElementById('video-grid');
+    grid.innerHTML = `<video id="local-video" autoplay muted></video>`;
+    document.getElementById('local-video').srcObject = currentStream;
+    document.getElementById('call-screen').style.display = 'block';
+
+    socket.emit('join-group-call');
+  } catch(e) {
+    alert("Camera/Mic feedhi barbaachisa!");
+  }
+}
+
+socket.on('user-joined-group', userId => {
+  if(!currentStream) return;
+  const p = new SimplePeer({ initiator: true, trickle: false, stream: currentStream });
+
+  p.on('signal', signal => {
+    socket.emit('group-signal', { signal, to: userId });
+  });
+
+  p.on('stream', remoteStream => {
+    let vid = document.getElementById(`remote-${userId}`);
+    if(!vid) {
+      vid = document.createElement('video');
+      vid.id = `remote-${userId}`;
+      vid.autoplay = true;
+      document.getElementById('video-grid').appendChild(vid);
+    }
+    vid.srcObject = remoteStream;
+  });
+
+  groupPeers[userId] = p;
+});
+
+socket.on('group-signal', data => {
+  if(!currentStream) return;
+  let p = groupPeers[data.from];
+  if(!p) {
+    p = new SimplePeer({ initiator: false, trickle: false, stream: currentStream });
+
+    p.on('signal', signal => {
+      socket.emit('group-signal', { signal, to: data.from });
+    });
+
+    p.on('stream', remoteStream => {
+      let vid = document.getElementById(`remote-${data.from}`);
+      if(!vid) {
+        vid = document.createElement('video');
+        vid.id = `remote-${data.from}`;
+        vid.autoplay = true;
+        document.getElementById('video-grid').appendChild(vid);
+      }
+      vid.srcObject = remoteStream;
+    });
+
+    groupPeers[data.from] = p;
+  }
+  p.signal(data.signal);
+});
+
+socket.on('user-left-group', userId => {
+  if(groupPeers[userId]) {
+    groupPeers[userId].destroy();
+    delete groupPeers[userId];
+  }
+  const vid = document.getElementById(`remote-${userId}`);
+  if(vid) vid.remove();
+});
+
 function endCall() {
-  if (peer) peer.destroy();
-  if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+  if (peer) { peer.destroy(); peer = null; }
+  Object.values(groupPeers).forEach(p => p.destroy());
+  groupPeers = {};
+  socket.emit('leave-group-call');
+
+  if (currentStream) {
+    currentStream.getTracks().forEach(t => t.stop());
+    currentStream = null;
+  }
   document.getElementById('call-screen').style.display = 'none';
 }
 
+// POST SUBMISSION
 function submitPost() {
   const content = document.getElementById('post-text').value;
-  const file = document.getElementById('post-file').files[0];
+  const fileInput = document.getElementById('post-file');
+  const file = fileInput.files[0];
 
   if (file) {
     const reader = new FileReader();
     reader.onload = e => {
       const type = file.type.startsWith('video') ? 'video' : 'image';
       socket.emit('create-post', { username: currentUser.username, content, mediaUrl: e.target.result, mediaType: type });
+      alert("Faayiliin keessan fe'amaa jira, xumuramnaan Admin-ni akka raggaasisuuf eegama.");
+      document.getElementById('post-text').value = '';
+      fileInput.value = '';
     };
     reader.readAsDataURL(file);
   } else {
     socket.emit('create-post', { username: currentUser.username, content });
+    alert("Post-n keessan ergameera.");
+    document.getElementById('post-text').value = '';
   }
 }
 
-socket.on('post-submitted-silent', post => {
-  document.getElementById('post-text').value = '';
-  alert("Post Review f ka'ameera, Admin-ni erga raggaasisee booda feed irratti ni baasa.");
-});
+socket.on('post-submitted-silent', post => {});
 
 async function loadPosts() {
   const res = await fetch('/api/posts');
