@@ -4,10 +4,17 @@ const { Server } = require('socket.io');
 const { Pool } = require('pg');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const compression = require('compression');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 1e8 });
+
+const io = new Server(server, { 
+  maxHttpBufferSize: 1e9,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  transports: ['websocket', 'polling']
+});
 
 const PORT = process.env.PORT || 10000;
 
@@ -16,9 +23,10 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(compression());
+app.use(express.json({ limit: '1000mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1000mb' }));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
 
 async function initDB() {
   try {
@@ -75,7 +83,7 @@ async function initDB() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_until TIMESTAMP DEFAULT NULL;
     `);
 
-    console.log("Database initialized & schema updated successfully.");
+    console.log("Database initialized successfully.");
   } catch (err) {
     console.error("DB Initialization Error:", err);
     process.exit(1);
@@ -146,14 +154,14 @@ app.post('/api/profile/update', async (req, res) => {
 
 app.get('/api/posts', async (req, res) => {
   try {
-    const posts = await pool.query('SELECT * FROM posts WHERE approved = TRUE ORDER BY id DESC LIMIT 50');
+    const posts = await pool.query('SELECT * FROM posts WHERE approved = TRUE ORDER BY id DESC LIMIT 20');
     res.json(posts.rows);
   } catch (err) {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
-// ADMIN API ROUTES (Post fi User Too'achuuf)
+// ADMIN API ROUTES
 app.get('/api/admin/pending-posts', async (req, res) => {
   try {
     const posts = await pool.query('SELECT * FROM posts ORDER BY id DESC');
@@ -193,7 +201,7 @@ app.post('/api/admin/ban-user', async (req, res) => {
   }
 });
 
-// WEBRTC & SOCKET REALTIME (Chat, Group Chat & Calls)
+// WEBRTC & SOCKET REALTIME (Direct Call & Group Call)
 const activeUsers = {};
 
 io.on('connection', (socket) => {
@@ -221,7 +229,7 @@ io.on('connection', (socket) => {
     }
   }
 
-  // WebRTC Call
+  // 1-on-1 Call
   socket.on('call-user', (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.userToCall);
     if (targetSocket) {
@@ -239,16 +247,24 @@ io.on('connection', (socket) => {
   socket.on('accept-call', (data) => io.to(data.to).emit('call-accepted', data.signal));
   socket.on('reject-call', (data) => io.to(data.to).emit('call-rejected'));
 
-  // Chat & Group Chat
-  socket.on('group-chat-message', (data) => {
-    io.emit('group-chat-message', data);
+  // --- FACEBOOK STYLE GROUP CALL SIGNALING ---
+  socket.on('join-group-call', () => {
+    socket.broadcast.emit('user-joined-group', socket.id);
   });
 
+  socket.on('group-signal', (data) => {
+    io.to(data.to).emit('group-signal', { signal: data.signal, from: socket.id });
+  });
+
+  socket.on('leave-group-call', () => {
+    socket.broadcast.emit('user-left-group', socket.id);
+  });
+
+  // Chat & Posts
+  socket.on('group-chat-message', (data) => io.emit('group-chat-message', data));
   socket.on('private-message', async (data) => {
     const targetSocket = Object.keys(activeUsers).find(k => activeUsers[k].username === data.receiver);
-    if (targetSocket) {
-      io.to(targetSocket).emit('private-message', data);
-    }
+    if (targetSocket) io.to(targetSocket).emit('private-message', data);
   });
 
   socket.on('create-post', async (data) => {
@@ -266,5 +282,6 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     delete activeUsers[socket.id];
     broadcastUserList();
+    socket.broadcast.emit('user-left-group', socket.id);
   });
 });
